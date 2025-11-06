@@ -1,85 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard | Inventory System</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dashboard | Inventory System</title>
+<link rel="stylesheet" href="style.css"/>
+<style>
+  .dashboard-buttons{display:flex;gap:20px;margin:20px 0}
+  .dashboard-button{flex:1;padding:30px;background:#44bd32;color:white;font-size:24px;text-align:center;border-radius:10px;cursor:pointer}
+  .info-card{margin-top:20px;background:#f1f2f6;padding:15px;border-radius:8px}
+  .clock{font-size:20px;font-weight:bold;margin-bottom:10px}
+</style>
 </head>
 <body>
-  <header>
-    <h1>🏠 Home Dashboard</h1>
-    <nav>
-      <a href="index.html">Home</a>
-      <a href="inventory.html">Inventory</a>
-      <a href="documents.html">Documents</a>
-      <a href="log.html">Activity Log</a>
-      <button onclick="toggleTheme()">🌓 Mode</button>
-      <button onclick="logout()">🚪 Logout</button>
-      <div id="adminInfo">Logged in as: <span id="adminName"></span></div>
-    </nav>
-  </header>
+<header>
+  <h1>🏠 Home Dashboard</h1>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="inventory.html">Inventory</a>
+    <a href="documents.html">Documents</a>
+    <a href="log.html">Activity Log</a>
+    <button onclick="toggleTheme()">🌓 Mode</button>
+    <button onclick="logout()">🚪 Logout</button>
+    <div id="adminInfo">Logged in as: <span id="adminName"></span></div>
+  </nav>
+</header>
 
-  <section>
-    <h2>Welcome to the Inventory & Document Management System</h2>
-    <p>This dashboard provides quick access to your inventory, document uploads, and activity log.</p>
-    <ul>
-      <li>📦 Manage inventory with SKU tracking.</li>
-      <li>📄 Upload and manage important documents.</li>
-      <li>🕒 Review all actions in your activity log.</li>
-      <li>🛠️ The website was developed by Brendan Jong & Leong Jia Wei</li>
-      <li>⚙️ Render Cloud database was established and managed by Leong</li>
-    </ul>
+<section>
+  <h2>Welcome to the Inventory & Document Management System</h2>
+  <div class="clock" id="clock"></div>
 
-    <!-- Real-time clock -->
-    <div class="clock" id="clock"></div>
+  <div class="dashboard-buttons">
+    <div class="dashboard-button" onclick="window.location.href='inventory.html'">📦 Inventory</div>
+    <div class="dashboard-button" onclick="window.location.href='documents.html'">📄 Documents</div>
+  </div>
 
-    <!-- Quick access buttons -->
-    <div class="dashboard-buttons">
-      <div class="dashboard-button" onclick="window.location.href='inventory.html'">📦 Inventory</div>
-      <div class="dashboard-button" onclick="window.location.href='documents.html'">📄 Documents</div>
-    </div>
+  <div class="info-card">
+    <h3>🧑‍🧑 Users Logged In Today</h3>
+    <p id="totalUsers">0</p>
+  </div>
 
-    <!-- Total users logged in today -->
-    <div class="info-card">
-      <h3>🧑‍🧑 Users Logged In Today</h3>
-      <p id="totalUsers">0</p>
-    </div>
+  <div class="info-card">
+    <h3>🕒 Recent Activity Log</h3>
+    <table>
+      <thead><tr><th>User</th><th>Action</th><th>Time</th></tr></thead>
+      <tbody id="recentActivities"></tbody>
+    </table>
+  </div>
+</section>
 
-    <!-- Recent activity log -->
-    <div class="info-card">
-      <h3>🕒 Recent Activity Log</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>User</th>
-            <th>Action</th>
-            <th>Time</th>
-          </tr>
-        </thead>
-        <tbody id="recentActivities"></tbody>
-      </table>
-    </div>
-
-    <div id="summary" class="info-card" style="margin-top:18px;"></div>
-  </section>
-
-  <script src="script.js"></script>
-  <script>
-    // realtime clock
-    function updateClock() {
-      const now = new Date();
-      const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
-      const dateStr = now.toLocaleDateString(undefined, options);
-      const timeStr = now.toLocaleTimeString();
-      document.getElementById('clock').textContent = `📅 ${dateStr} ⏰ ${timeStr}`;
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    // fetch dashboard data via script.js helper
-    setInterval(() => { if (window.fetchDashboardData) window.fetchDashboardData(); }, 5000);
-    if (window.fetchDashboardData) window.fetchDashboardData();
-  </script>
+<script src="script.js" defer></script>
+<script>
+  // realtime clock
+  function updateClock() {
+    const now = new Date();
+    const options = { weekday: "short", year: "numeric", month: "short", day: "numeric" };
+    const dateStr = now.toLocaleDateString(undefined, options);
+    const timeStr = now.toLocaleTimeString();
+    document.getElementById("clock").textContent = `📅 ${dateStr} ⏰ ${timeStr}`;
+  }
+  setInterval(updateClock, 1000); updateClock();
+  // periodical dashboard refresh uses fetchDashboardData defined in script.js
+  setInterval(()=>{ if (window.fetchDashboardData) window.fetchDashboardData(); }, 5000);
+  if (window.fetchDashboardData) window.fetchDashboardData();
+</script>
 </body>
 </html>

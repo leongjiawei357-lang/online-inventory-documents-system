@@ -1,30 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Activity Log | Inventory System</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Activity Log | Inventory System</title>
+<link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <header>
-    <h1>🕒 Activity Log</h1>
-    <nav>
-      <a href="index.html">Home</a>
-      <a href="inventory.html">Inventory</a>
-      <a href="documents.html">Documents</a>
-      <a href="log.html">Activity Log</a>
-      <button onclick="toggleTheme()">🌓 Mode</button>
-      <button onclick="logout()">🚪 Logout</button>
-      <div id="adminInfo">Logged in as: <span id="adminName"></span></div>
-    </nav>
-  </header>
+<header>
+  <h1>🕒 Activity Log</h1>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="inventory.html">Inventory</a>
+    <a href="documents.html">Documents</a>
+    <a href="log.html">Activity Log</a>
+    <button onclick="toggleTheme()">🌓 Mode</button>
+    <button onclick="logout()">🚪 Logout</button>
+    <div id="adminInfo">Logged in as: <span id="adminName"></span></div>
+  </nav>
+</header>
 
-  <section id="activityLog">
-    <h2>Recent Activities</h2>
-    <ul id="logList"></ul>
-  </section>
+<section id="activityLog">
+  <h2>Recent Activities</h2>
+  <ul id="logList"></ul>
+</section>
 
-  <script src="script.js"></script>
+<script src="script.js" defer></script>
+<script>document.documentElement.dataset.page = 'log';</script>
 </body>
 </html>
