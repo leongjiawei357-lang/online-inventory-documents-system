@@ -1,272 +1,177 @@
-// server/server.js (ES module)
-import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import bodyParser from "body-parser";
-import mongoose from "mongoose";
-import dotenv from "dotenv";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import multer from "multer";
-import ExcelJS from "exceljs";
-import crypto from "crypto";
-
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/inventory_sys";
-const SECURITY_CODE = process.env.SECURITY_CODE || "L&B2025";
+// server/server.js (CommonJS)
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const mongoose = require('mongoose');
+const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
+const ExcelJS = require('exceljs');
 
 const app = express();
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/inventory_system';
+const SECURITY_CODE = process.env.SECURITY_CODE || 'L&B2025';
 
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(helmet());
+app.use('/uploads', express.static(path.join(__dirname,'uploads')));
+app.use('/reports', express.static(path.join(__dirname,'reports')));
 
-// Helmet CSP: restrict allowed sources (no inline event handlers)
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'"],
-        objectSrc: ["'none'"],
-      },
-    },
-  })
-);
+// connect to mongo
+mongoose.connect(MONGO_URI).then(()=>console.log('✅ MongoDB connected')).catch(err=>console.error('MongoDB error',err));
 
-// create folders
-const uploadsDir = path.join(__dirname, "uploads");
-const reportsDir = path.join(__dirname, "reports");
-const dbDir = path.join(__dirname, "db");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+// === Schemas ===
+const userSchema = new mongoose.Schema({ username:String, password:String, createdAt:Date });
+const User = mongoose.model('User', userSchema);
 
-// simple file DB helper (fallback to JSON files)
-const dbFile = (name) => path.join(dbDir, name);
-function readDB(name) {
-  const p = dbFile(name);
-  if (!fs.existsSync(p)) fs.writeFileSync(p, "[]");
+const invSchema = new mongoose.Schema({
+  sku:String, name:String, category:String, quantity:Number, unitCost:Number, unitPrice:Number, createdAt:Date, updatedAt:Date
+});
+const Inventory = mongoose.model('Inventory', invSchema);
+
+const docSchema = new mongoose.Schema({ name:String, path:String, size:Number, date:String });
+const Document = mongoose.model('Document', docSchema);
+
+const logSchema = new mongoose.Schema({ user:String, action:String, time:Date });
+const Log = mongoose.model('Log', logSchema);
+
+// helper log
+async function addLog(action, user='System'){
+  await Log.create({ user, action, time:new Date() });
+}
+
+// === Auth ===
+app.post('/api/register', async (req,res)=>{
   try {
-    return JSON.parse(fs.readFileSync(p));
-  } catch (e) {
-    return [];
-  }
-}
-function writeDB(name, data) {
-  fs.writeFileSync(dbFile(name), JSON.stringify(data, null, 2));
-}
-
-// Multer storage safe filename
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const unique = Date.now() + "-" + crypto.randomBytes(4).toString("hex");
-    const safe = file.originalname.replace(/[^a-zA-Z0-9.\-_() ]/g, "_");
-    cb(null, `${unique}-${safe}`);
-  },
-});
-const upload = multer({ storage });
-
-// Logging utility
-function addLog(action, user = "System") {
-  const logs = readDB("logs.json");
-  logs.unshift({ id: Date.now() + "-" + crypto.randomBytes(3).toString("hex"), time: new Date().toISOString(), user, action });
-  writeDB("logs.json", logs);
-}
-
-// ----------------- MONGO (optional) - if you prefer file DB, we still keep file DB as main
-mongoose
-  .connect(MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.warn("⚠️ MongoDB connection error - continuing with file DB (if intended):", err.message));
-
-// ----------------- AUTH (file DB) -----------------
-app.post("/api/register", (req, res) => {
-  const { username, password, securityCode } = req.body;
-  if (securityCode !== SECURITY_CODE) return res.status(400).json({ message: "Invalid security code." });
-
-  const users = readDB("users.json");
-  if (users.find((u) => u.username === username)) return res.status(400).json({ message: "Username already exists." });
-
-  const user = { id: Date.now() + "-" + crypto.randomBytes(3).toString("hex"), username, password };
-  users.push(user);
-  writeDB("users.json", users);
-  addLog(`Registered user: ${username}`, username);
-  res.json({ message: "Registered" });
+    const { username, password, securityCode } = req.body; // matches client
+    if (securityCode !== SECURITY_CODE) return res.status(400).json({ message: 'Invalid security code.' });
+    if (!username || !password) return res.status(400).json({ message: 'Missing fields.' });
+    const exists = await User.findOne({ username });
+    if (exists) return res.status(400).json({ message: 'Username already exists.' });
+    const u = new User({ username, password, createdAt: new Date() });
+    await u.save();
+    await addLog(`Registered user ${username}`, username);
+    res.json({ message:'Registered', username });
+  } catch(err) { console.error(err); res.status(500).json({ message:'Server error' }); }
 });
 
-app.post("/api/login", (req, res) => {
-  const { username, password } = req.body;
-  const users = readDB("users.json");
-  const user = users.find((u) => u.username === username && u.password === password);
-  if (!user) return res.status(401).json({ message: "Invalid username or password." });
-  addLog(`User logged in: ${username}`, username);
-  res.json({ username: user.username });
+app.post('/api/login', async (req,res)=>{
+  try {
+    const { username, password } = req.body;
+    const user = await User.findOne({ username, password });
+    if (!user) return res.status(401).json({ message:'Invalid username or password.' });
+    await addLog(`User logged in: ${username}`, username);
+    res.json({ username: user.username });
+  } catch(err){ console.error(err); res.status(500).json({ message:'Server error' }); }
 });
 
-// ----------------- INVENTORY (file DB) -----------------
-app.get("/api/inventory", (req, res) => {
-  res.json(readDB("inventory.json"));
+// === Inventory CRUD ===
+app.get('/api/inventory', async (req,res)=>{
+  const items = await Inventory.find({}).lean();
+  res.json(items);
 });
-
-app.post("/api/inventory", (req, res) => {
-  const items = readDB("inventory.json");
-  const item = {
-    id: Date.now() + "-" + crypto.randomBytes(3).toString("hex"),
-    sku: req.body.sku || "",
-    name: req.body.name || "",
-    category: req.body.category || "",
-    quantity: Number(req.body.quantity || 0),
-    unitCost: Number(req.body.unitCost || 0),
-    unitPrice: Number(req.body.unitPrice || 0),
-    createdAt: new Date().toISOString(),
-  };
-  items.push(item);
-  writeDB("inventory.json", items);
-  addLog(`Added inventory item: ${item.name}`);
+app.post('/api/inventory', async (req,res)=>{
+  const body = req.body;
+  const item = new Inventory({ ...body, createdAt: new Date() });
+  await item.save();
+  await addLog(`Added inventory: ${item.name}`);
   res.json(item);
 });
-
-app.put("/api/inventory/:id", (req, res) => {
-  const items = readDB("inventory.json");
-  const idx = items.findIndex((i) => String(i.id) === String(req.params.id));
-  if (idx === -1) return res.status(404).json({ message: "Item not found" });
-  const safe = (({ sku, name, category, quantity, unitCost, unitPrice }) => ({ sku, name, category, quantity, unitCost, unitPrice }))(req.body);
-  items[idx] = { ...items[idx], ...safe, updatedAt: new Date().toISOString() };
-  writeDB("inventory.json", items);
-  addLog(`Updated item: ${items[idx].name}`);
-  res.json(items[idx]);
+app.put('/api/inventory/:id', async (req,res)=>{
+  const id = req.params.id;
+  const updated = await Inventory.findByIdAndUpdate(id, { ...req.body, updatedAt: new Date() }, { new:true });
+  if(!updated) return res.status(404).json({ message:'Not found' });
+  await addLog(`Updated inventory: ${updated.name}`);
+  res.json(updated);
+});
+app.delete('/api/inventory/:id', async (req,res)=>{
+  const id = req.params.id;
+  const del = await Inventory.findByIdAndDelete(id);
+  if(!del) return res.status(404).json({ message:'Not found' });
+  await addLog(`Deleted inventory: ${del.name}`);
+  res.json({ message:'Deleted' });
 });
 
-app.delete("/api/inventory/:id", (req, res) => {
-  let items = readDB("inventory.json");
-  const item = items.find((i) => String(i.id) === String(req.params.id));
-  if (!item) return res.status(404).json({ message: "Item not found" });
-  items = items.filter((i) => String(i.id) !== String(req.params.id));
-  writeDB("inventory.json", items);
-  addLog(`Deleted item: ${item.name}`);
-  res.json({ message: "Deleted" });
-});
-
-// ----------------- REPORT (XLSX) -----------------
-app.get("/api/inventory/report", async (req, res) => {
+// === Reports (xlsx) ===
+const reportsDir = path.join(__dirname,'reports'); if(!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir);
+app.get('/api/inventory/report', async (req,res)=>{
   try {
-    const items = readDB("inventory.json");
-    const filenameBase = `Inventory_Report_${new Date().toISOString().slice(0, 10)}`;
-    const xlsxPath = path.join(reportsDir, `${filenameBase}.xlsx`);
-
+    const items = await Inventory.find({}).lean();
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Inventory Report");
-    sheet.addRow(["L&B Company - Inventory Report"]);
-    sheet.addRow(["Date:", new Date().toISOString()]);
+    const sheet = workbook.addWorksheet('Inventory Report');
+    sheet.addRow(['L&B Company - Inventory Report']);
+    sheet.addRow(['Report Date:', new Date().toLocaleString()]);
     sheet.addRow([]);
-    sheet.addRow(["SKU", "Name", "Category", "Quantity", "Unit Cost", "Unit Price", "Total Inventory Value", "Total Potential Revenue"]);
-    let totalValue = 0,
-      totalRevenue = 0;
-    items.forEach((it) => {
-      const qty = Number(it.quantity || 0);
-      const uc = Number(it.unitCost || 0);
-      const up = Number(it.unitPrice || 0);
-      const invVal = qty * uc;
-      const rev = qty * up;
-      totalValue += invVal;
-      totalRevenue += rev;
-      sheet.addRow([it.sku, it.name, it.category, qty, uc, up, invVal, rev]);
+    sheet.addRow(['SKU','Name','Category','Quantity','Unit Cost','Unit Price','Total Inventory Value','Total Potential Revenue']);
+    let totalValue=0,totalRevenue=0;
+    items.forEach(it=>{
+      const invVal = (it.quantity||0)*(it.unitCost||0);
+      const rev = (it.quantity||0)*(it.unitPrice||0);
+      totalValue += invVal; totalRevenue += rev;
+      sheet.addRow([it.sku,it.name,it.category,it.quantity,it.unitCost,it.unitPrice,invVal,rev]);
     });
     sheet.addRow([]);
-    sheet.addRow(["", "", "", "Totals", "", "", totalValue, totalRevenue]);
-
-    await workbook.xlsx.writeFile(xlsxPath);
-
-    // add to documents DB (so client can show it)
-    const docs = readDB("documents.json");
-    docs.unshift({
-      id: Date.now() + "-" + crypto.randomBytes(3).toString("hex"),
-      name: path.basename(xlsxPath),
-      path: xlsxPath,
-      size: fs.statSync(xlsxPath).size,
-      date: new Date().toISOString(),
-    });
-    writeDB("documents.json", docs);
-
-    addLog(`Generated Inventory Report: ${path.basename(xlsxPath)}`);
-
-    res.setHeader("Content-Disposition", `attachment; filename="${path.basename(xlsxPath)}"`);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    fs.createReadStream(xlsxPath).pipe(res);
-  } catch (err) {
-    console.error("report generation failed:", err);
-    res.status(500).json({ message: "Report generation failed" });
-  }
+    sheet.addRow(['','','','Totals','','',totalValue,totalRevenue]);
+    const filename = `Inventory_Report_${new Date().toISOString().slice(0,10)}.xlsx`;
+    const outPath = path.join(reportsDir, filename);
+    await workbook.xlsx.writeFile(outPath);
+    // save as document record
+    await Document.create({ name: filename, path: outPath, size: fs.statSync(outPath).size, date:new Date().toLocaleString() });
+    await addLog(`Generated report ${filename}`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    fs.createReadStream(outPath).pipe(res);
+  } catch(err){ console.error(err); res.status(500).json({ message:'Report error' }); }
 });
 
-// ----------------- DOCUMENTS -----------------
-app.get("/api/documents", (req, res) => res.json(readDB("documents.json")));
-
-app.post("/api/documents", upload.array("documents"), (req, res) => {
-  const docs = readDB("documents.json");
-  (req.files || []).forEach((f) =>
-    docs.unshift({
-      id: Date.now() + "-" + crypto.randomBytes(3).toString("hex"),
-      name: f.originalname,
-      path: f.path,
-      size: f.size,
-      date: new Date().toISOString(),
-    })
-  );
-  writeDB("documents.json", docs);
-  addLog(`Uploaded ${req.files.length} document(s)`);
-  res.json({ message: "Uploaded" });
+// === Documents ===
+const upload = multer({ dest: path.join(__dirname,'uploads') });
+app.get('/api/documents', async (req,res) => {
+  const docs = await Document.find({}).lean();
+  res.json(docs);
 });
-
-app.delete("/api/documents/:id", (req, res) => {
-  let docs = readDB("documents.json");
-  const doc = docs.find((d) => String(d.id) === String(req.params.id));
-  if (!doc) return res.status(404).json({ message: "Document not found" });
+app.post('/api/documents', upload.array('documents'), async (req,res) => {
   try {
-    if (fs.existsSync(doc.path)) fs.unlinkSync(doc.path);
-  } catch (e) {
-    console.warn("unlink failed", e.message);
-  }
-  docs = docs.filter((d) => String(d.id) !== String(req.params.id));
-  writeDB("documents.json", docs);
-  addLog(`Deleted document: ${doc.name}`);
-  res.json({ message: "Deleted" });
-});
-
-app.get("/api/documents/:id/download", (req, res) => {
-  const docs = readDB("documents.json");
-  const doc = docs.find((d) => String(d.id) === String(req.params.id));
-  if (!doc) return res.status(404).json({ message: "Document not found" });
-  if (!fs.existsSync(doc.path)) return res.status(404).json({ message: "File missing" });
-  res.download(doc.path, doc.name, (err) => {
-    if (err) {
-      console.error("download error", err);
-      if (!res.headersSent) res.status(500).json({ message: "Download failed" });
-    } else {
-      addLog(`Downloaded document: ${doc.name}`);
+    const saved = [];
+    for (const f of req.files || []) {
+      const rec = await Document.create({ name: f.originalname, path: f.path, size: f.size, date: new Date().toLocaleString() });
+      saved.push(rec);
     }
-  });
+    await addLog(`Uploaded ${saved.length} document(s)`);
+    res.json({ message: 'Uploaded', saved });
+  } catch (err) { console.error(err); res.status(500).json({ message:'Upload failed' }); }
+});
+app.get('/api/documents/:id/download', async (req,res) => {
+  try {
+    const doc = await Document.findById(req.params.id).lean();
+    if (!doc) return res.status(404).json({ message:'Not found' });
+    if (!fs.existsSync(doc.path)) return res.status(404).json({ message:'File missing' });
+    res.download(doc.path, doc.name, err => { if (err) console.error(err); });
+  } catch(err){ console.error(err); res.status(500).json({ message:'Download error' }); }
+});
+app.delete('/api/documents/:id', async (req,res)=>{
+  try {
+    const doc = await Document.findByIdAndDelete(req.params.id);
+    if (!doc) return res.status(404).json({ message:'Not found' });
+    try { if (fs.existsSync(doc.path)) fs.unlinkSync(doc.path); } catch(e){ console.warn(e.message); }
+    await addLog(`Deleted document: ${doc.name}`);
+    res.json({ message:'Deleted' });
+  } catch(err) { console.error(err); res.status(500).json({ message:'Delete failed' }); }
 });
 
-// ----------------- LOGS -----------------
-app.get("/api/logs", (req, res) => res.json(readDB("logs.json")));
-
-// ----------------- Serve client static -----------------
-app.use(express.static(path.join(__dirname, "../client")));
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../client/login.html"));
+// === Logs ===
+app.get('/api/logs', async (req,res) => {
+  const logs = await Log.find({}).sort({ time: -1 }).limit(200).lean();
+  res.json(logs);
 });
 
-// ----------------- Start -----------------
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// === Serve client ===
+app.use(express.static(path.join(__dirname,'../client')));
+app.get('*', (req,res) => {
+  res.sendFile(path.join(__dirname,'../client/index.html'));
+});
+
+app.listen(PORT, ()=> console.log(`Server running on port ${PORT}`));
