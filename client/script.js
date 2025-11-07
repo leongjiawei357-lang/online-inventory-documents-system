@@ -1,440 +1,461 @@
-// client/script.js
-// API base: relative so same-origin works on Render
+// ===============================
+// CONFIG (Render Backend)
+// ===============================
 const API_BASE = "https://online-inventory-documents-system.onrender.com/api";
 
-// ====== Utilities ======
-function qs(sel){ return document.querySelector(sel); }
-function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
-function eJSON(res){ return res.json().catch(()=>({})); }
-function showMsg(el, text, color='red'){ if(!el) return; el.textContent = text; el.style.color = color; }
-
-// Escape HTML simple
-function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
-
-// ====== Auth redirect (keep user on login) ======
-if(!sessionStorage.getItem('isLoggedIn') && !window.location.pathname.includes('login.html')) {
-  window.location.href = 'login.html';
+// ===============================
+// LOGIN REDIRECT (only redirect if not on login page)
+// ===============================
+if (!sessionStorage.getItem("isLoggedIn") && !window.location.pathname.includes("login.html")) {
+  window.location.href = "login.html";
 }
 
-// ====== Global state ======
+// ===============================
+// GLOBAL
+// ===============================
 let inventory = [];
 let documents = [];
 let activityLog = [];
-const currentPage = window.location.pathname.split('/').pop();
+const currentPage = window.location.pathname.split("/").pop();
 
-// ====== On load init ======
-window.addEventListener('load', async () => {
+// small helper to set admin name on pages
+function setAdminName() {
+  const adminName = sessionStorage.getItem("adminName") || localStorage.getItem("adminName");
+  if (document.getElementById("adminName")) document.getElementById("adminName").textContent = adminName || "Admin";
+}
+setAdminName();
+
+// ===============================
+// ON LOAD - fetch relevant data
+// ===============================
+window.addEventListener("DOMContentLoaded", async () => {
+  setAdminName();
+  // Attach global UI buttons (CSP-safe)
+  const btnTheme = document.getElementById("btn-theme") || document.getElementById("btnTheme") || document.getElementById("btn-theme");
+  const btnLogout = document.getElementById("btn-logout") || document.getElementById("btnLogout") || document.getElementById("btn-logout");
+  const quickInv = document.getElementById("shortcut-inventory");
+  const quickDoc = document.getElementById("shortcut-documents");
+
+  if (btnTheme) btnTheme.addEventListener("click", toggleTheme);
+  if (btnLogout) btnLogout.addEventListener("click", logout);
+  if (quickInv) quickInv.addEventListener("click", () => window.location.href = "inventory.html");
+  if (quickDoc) quickDoc.addEventListener("click", () => window.location.href = "documents.html");
+
+  // login page buttons (if present)
+  const loginBtn = document.getElementById("loginBtn");
+  const registerBtn = document.getElementById("registerBtn");
+  const toggleToRegister = document.getElementById("toggleToRegister");
+  const toggleToLogin = document.getElementById("toggleToLogin");
+  if (loginBtn) loginBtn.addEventListener("click", login);
+  if (registerBtn) registerBtn.addEventListener("click", register);
+  if (toggleToRegister) toggleToRegister.addEventListener("click", toggleForm);
+  if (toggleToLogin) toggleToLogin.addEventListener("click", toggleForm);
+
+  // page-specific fetches
   try {
-    const adminName = sessionStorage.getItem('adminName') || localStorage.getItem('adminName');
-    if(qs('#adminName')) qs('#adminName').textContent = adminName || 'Admin';
-
-    if(currentPage.includes('inventory')) { await fetchInventory(); bindInventoryUI(); }
-    if(currentPage.includes('documents')) { await fetchDocuments(); bindDocumentsUI(); }
-    if(currentPage.includes('log')) { await fetchLogs(); }
-    if(currentPage.includes('index.html') || currentPage === '' || currentPage === 'index.html') {
-      if(window.fetchDashboardData) fetchDashboardData();
+    if (currentPage.includes("inventory")) await fetchInventory();
+    if (currentPage.includes("documents")) await fetchDocuments();
+    if (currentPage.includes("log")) await fetchLogs();
+    if (currentPage === "index.html" || currentPage === "" || currentPage === "index") {
+      // fetch dashboard activities
+      if (window.fetchDashboardData) window.fetchDashboardData();
     }
-    if(currentPage.includes('product')) bindProductPage();
+  } catch (e) {
+    console.error("Error during page init:", e);
+  }
 
-    const theme = localStorage.getItem('theme');
-    if(theme === 'dark') document.body.classList.add('dark-mode');
-  } catch(e){ console.error('init error', e); }
+  // attach inventory add form if present
+  const addItemForm = document.getElementById("addItemForm");
+  if (addItemForm) addItemForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(addItemForm);
+    const item = Object.fromEntries(formData.entries());
+    item.quantity = parseInt(item.quantity || 0, 10);
+    item.unitCost = parseFloat(item.unitCost || 0);
+    item.unitPrice = parseFloat(item.unitPrice || 0);
+    try {
+      const res = await fetch(`${API_BASE}/inventory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item)
+      });
+      if (res.ok) {
+        alert("✅ Item added successfully!");
+        addItemForm.reset();
+        await fetchInventory();
+      } else {
+        const txt = await res.text();
+        alert("❌ Failed to add item: " + txt);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("⚠️ Unable to contact server.");
+    }
+  });
 });
 
-// ====== AUTH ======
-async function login(){
-  const user = qs('#username')?.value.trim();
-  const pass = qs('#password')?.value.trim();
-  const msg = qs('#loginMessage');
-  showMsg(msg, '');
-  if(!user||!pass){ showMsg(msg, '⚠️ Please enter username and password.', 'red'); return; }
+// ===============================
+// AUTH (Login/Register)
+// ===============================
+async function login() {
+  const user = document.getElementById("username")?.value?.trim();
+  const pass = document.getElementById("password")?.value?.trim();
+  const msg = document.getElementById("loginMessage");
+  if (msg) msg.textContent = "";
 
-  try{
+  if (!user || !pass) {
+    if (msg) { msg.textContent = "⚠️ Please enter username and password."; msg.style.color = "red"; }
+    return;
+  }
+  try {
     const res = await fetch(`${API_BASE}/login`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: user, password: pass })
     });
-    const data = await eJSON(res);
-    if(res.ok){
-      sessionStorage.setItem('isLoggedIn','true');
-      sessionStorage.setItem('adminName', data.username || user);
-      localStorage.setItem('adminName', data.username || user);
-      showMsg(msg, '✅ Login successful! Redirecting...', 'green');
-      setTimeout(()=> window.location.href = 'index.html', 700);
+    const data = await res.json();
+    if (res.ok) {
+      sessionStorage.setItem("isLoggedIn", "true");
+      sessionStorage.setItem("adminName", data.username || user);
+      localStorage.setItem("adminName", data.username || user);
+      if (msg) { msg.textContent = "✅ Login successful! Redirecting..."; msg.style.color = "green"; }
+      setTimeout(() => window.location.href = "index.html", 700);
     } else {
-      showMsg(msg, data.message || '❌ Invalid username or password.', 'red');
+      if (msg) { msg.textContent = data.message || "❌ Invalid username or password."; msg.style.color = "red"; }
     }
-  } catch(e){
-    showMsg(msg, '❌ Unable to contact server.', 'red');
+  } catch (err) {
+    console.error("Login error", err);
+    if (msg) { msg.textContent = "❌ Unable to contact server."; msg.style.color = "red"; }
   }
 }
 
-async function register(){
-  const user = qs('#newUsername')?.value.trim();
-  const pass = qs('#newPassword')?.value.trim();
-  const code = qs('#securityCode')?.value.trim();
-  const msg = qs('#registerMessage');
-  showMsg(msg, '');
-  if(!user||!pass||!code){ showMsg(msg, '⚠️ Please fill in all fields.', 'red'); return; }
+async function register() {
+  const user = document.getElementById("newUsername")?.value?.trim();
+  const pass = document.getElementById("newPassword")?.value?.trim();
+  const code = document.getElementById("securityCode")?.value?.trim();
+  const msg = document.getElementById("registerMessage");
+  if (msg) msg.textContent = "";
 
-  try{
+  if (!user || !pass || !code) {
+    if (msg) { msg.textContent = "⚠️ Please fill in all fields."; msg.style.color = "red"; }
+    return;
+  }
+
+  try {
+    // IMPORTANT: send fields named username/password/securityCode to match server
     const res = await fetch(`${API_BASE}/register`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: user, password: pass, securityCode: code })
     });
-    const data = await eJSON(res);
-    if(res.ok){
-      showMsg(msg, '✅ Registered successfully! You can now log in.', 'green');
-      setTimeout(()=> toggleForm(), 900);
+    const data = await res.json();
+    if (res.ok) {
+      if (msg) { msg.textContent = "✅ Registered successfully! You can now log in."; msg.style.color = "green"; }
+      // show login form
+      setTimeout(toggleForm, 1100);
     } else {
-      showMsg(msg, data.message || '❌ Registration failed.', 'red');
+      if (msg) { msg.textContent = data.message || "❌ Registration failed."; msg.style.color = "red"; }
     }
-  } catch(e){
-    showMsg(msg, '❌ Unable to contact server.', 'red');
+  } catch (err) {
+    console.error("Register error", err);
+    if (msg) { msg.textContent = "❌ Unable to contact server."; msg.style.color = "red"; }
   }
 }
 
-function toggleForm(){
-  const loginForm = qs('#loginForm');
-  const registerForm = qs('#registerForm');
-  const formTitle = qs('#formTitle');
-  if(!loginForm || !registerForm) return;
-  if(getComputedStyle(loginForm).display === 'none'){
-    loginForm.style.display = 'block';
-    registerForm.style.display = 'none';
-    formTitle.textContent = '🔐 Admin Login';
+function toggleForm() {
+  const loginForm = document.getElementById("loginForm");
+  const registerForm = document.getElementById("registerForm");
+  const formTitle = document.getElementById("formTitle");
+  if (!loginForm || !registerForm || !formTitle) return;
+  if (loginForm.style.display === "none") {
+    loginForm.style.display = "block";
+    registerForm.style.display = "none";
+    formTitle.textContent = "🔐 Admin Login";
   } else {
-    loginForm.style.display = 'none';
-    registerForm.style.display = 'block';
-    formTitle.textContent = '🧾 Register Account';
+    loginForm.style.display = "none";
+    registerForm.style.display = "block";
+    formTitle.textContent = "🧾 Register Account";
   }
 }
 
-// Bind login/register UI events (CSP-safe)
-document.addEventListener('DOMContentLoaded', () => {
-  const loginBtn = qs('#loginBtn');
-  const registerBtn = qs('#registerBtn');
-  const toggleToRegister = qs('#toggleToRegister');
-  const toggleToLogin = qs('#toggleToLogin');
-  if(loginBtn) loginBtn.addEventListener('click', login);
-  if(registerBtn) registerBtn.addEventListener('click', register);
-  if(toggleToRegister) toggleToRegister.addEventListener('click', toggleForm);
-  if(toggleToLogin) toggleToLogin.addEventListener('click', toggleForm);
-});
-
-// ====== INVENTORY ======
-async function fetchInventory(){
-  try{
+// ===============================
+// INVENTORY
+// ===============================
+async function fetchInventory() {
+  try {
     const res = await fetch(`${API_BASE}/inventory`);
-    if(!res.ok) throw new Error('Failed to fetch inventory.');
+    if (!res.ok) throw new Error("Failed to fetch inventory.");
     inventory = await res.json();
     renderInventory();
-  } catch(err){
+  } catch (err) {
     console.error(err);
-    alert('⚠️ Unable to load inventory data.');
+    alert("⚠️ Unable to load inventory data.");
   }
 }
 
-function renderInventory(){
-  const tbody = qs('#inventoryTable tbody');
-  if(!tbody) return;
-  tbody.innerHTML = '';
-  let totalValue = 0, totalRevenue = 0, totalStock = 0;
+function renderInventory() {
+  const tbody = document.querySelector("#inventoryTable tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
 
+  let totalValue = 0, totalRevenue = 0, totalStock = 0;
   inventory.forEach((item, i) => {
-    const qty = Number(item.quantity || 0);
-    const uc = Number(item.unitCost || 0);
-    const up = Number(item.unitPrice || 0);
-    const itemTotalValue = qty * uc;
-    const itemRevenue = qty * up;
+    const itemTotalValue = (item.quantity || 0) * (item.unitCost || 0);
+    const itemRevenue = (item.quantity || 0) * (item.unitPrice || 0);
     totalValue += itemTotalValue;
     totalRevenue += itemRevenue;
-    totalStock += qty;
+    totalStock += (item.quantity || 0);
 
-    const tr = document.createElement('tr');
-    tr.dataset.index = i;
-    tr.innerHTML = `
-      <td>${escapeHtml(item.sku||'')}</td>
-      <td>${escapeHtml(item.name||'')}</td>
-      <td>${escapeHtml(item.category||'')}</td>
-      <td>${qty}</td>
-      <td>${uc.toFixed(2)}</td>
-      <td>${up.toFixed(2)}</td>
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${item.sku}</td>
+      <td>${item.name}</td>
+      <td>${item.category}</td>
+      <td>${item.quantity}</td>
+      <td>${(item.unitCost||0).toFixed(2)}</td>
+      <td>${(item.unitPrice||0).toFixed(2)}</td>
       <td>${itemTotalValue.toFixed(2)}</td>
       <td>${itemRevenue.toFixed(2)}</td>
-      <td class="actions"></td>
+      <td>
+        <button data-action="edit" data-index="${i}">✏️</button>
+        <button data-action="delete" data-index="${i}">🗑️</button>
+      </td>
     `;
-    tbody.appendChild(tr);
-
-    // actions
-    const actionsTd = tr.querySelector('.actions');
-    const editBtn = document.createElement('button');
-    editBtn.className = 'action-btn edit-btn';
-    editBtn.type = 'button';
-    editBtn.textContent = '✏️';
-    editBtn.addEventListener('click', ()=> openEditPageForItem(item));
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'action-btn del-btn';
-    delBtn.type = 'button';
-    delBtn.textContent = '🗑️';
-    delBtn.addEventListener('click', ()=> deleteItemConfirm(i));
-
-    actionsTd.appendChild(editBtn);
-    actionsTd.appendChild(delBtn);
+    tbody.appendChild(row);
   });
 
-  if(qs('#totalValue')) qs('#totalValue').textContent = totalValue.toFixed(2);
-  if(qs('#totalRevenue')) qs('#totalRevenue').textContent = totalRevenue.toFixed(2);
-  if(qs('#totalStock')) qs('#totalStock').textContent = totalStock;
-}
-
-// Called by Edit button
-function openEditPageForItem(item){
-  if(!item || !item.id) { alert('Cannot edit: id missing'); return; }
-  window.location.href = `product.html?id=${encodeURIComponent(item.id)}`;
-}
-
-async function deleteItemConfirm(i){
-  const item = inventory[i];
-  if(!item) return;
-  if(!confirm(`Delete "${item.name}"?`)) return;
-  try{
-    const res = await fetch(`${API_BASE}/inventory/${item.id}`, { method: 'DELETE' });
-    if(!res.ok){ const txt = await res.text(); throw new Error(txt||'Delete failed'); }
-    alert('🗑️ Item deleted!');
-    await fetchInventory();
-  } catch(err){ console.error(err); alert('❌ Delete failed'); }
-}
-
-// Add product from top bar
-async function addProductFromBar(){
-  const sku = qs('#p_sku')?.value.trim();
-  const name = qs('#p_name')?.value.trim();
-  const category = qs('#p_category')?.value.trim();
-  const quantity = parseInt(qs('#p_quantity')?.value || 0, 10);
-  const unitCost = parseFloat(qs('#p_unitCost')?.value || 0);
-  const unitPrice = parseFloat(qs('#p_unitPrice')?.value || 0);
-  if(!sku || !name) return alert('Please enter SKU and Name.');
-
-  try{
-    const res = await fetch(`${API_BASE}/inventory`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ sku, name, category, quantity, unitCost, unitPrice })
-    });
-    if(!res.ok) { const txt = await res.text(); throw new Error(txt||'Add failed'); }
-    ['#p_sku','#p_name','#p_category','#p_quantity','#p_unitCost','#p_unitPrice'].forEach(id => { if(qs(id)) qs(id).value=''; });
-    await fetchInventory();
-    alert('✅ Product added.');
-  } catch(err){ console.error(err); alert('❌ Add failed.'); }
-}
-
-// Search items
-function searchItems(){
-  const q = (qs('#searchInput')?.value || '').toLowerCase().trim();
-  const rows = qsa('#inventoryTable tbody tr');
-  rows.forEach(r => {
-    const text = r.textContent.toLowerCase();
-    r.style.display = text.includes(q) ? '' : 'none';
+  // attach delegated click handlers for edit/delete
+  tbody.querySelectorAll("button").forEach(btn => {
+    const action = btn.getAttribute("data-action");
+    const idx = parseInt(btn.getAttribute("data-index"), 10);
+    if (action === "edit") btn.addEventListener("click", () => editItem(idx));
+    if (action === "delete") btn.addEventListener("click", () => deleteItem(idx));
   });
-}
 
-// ================= REPORT (download xlsx & refresh documents) =================
-async function generateReport(){
-  try{
-    const res = await fetch(`${API_BASE}/inventory/report`);
-    if(!res.ok){
-      const txt = await res.text();
-      throw new Error(txt || 'Failed to generate report');
-    }
-    const blob = await res.blob();
-    const filename = `Inventory_Report_${new Date().toISOString().slice(0,10)}.xlsx`;
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link); link.click(); link.remove();
-
-    // give server a moment to write documents.json then refresh documents
-    setTimeout(()=> { if(typeof fetchDocuments === 'function') fetchDocuments().catch(()=>{}); }, 500);
-    alert('✅ Report downloaded and added to Documents.');
-  } catch(err){
-    console.error(err);
-    alert('❌ Report generation failed: ' + (err.message || err));
+  const summary = document.getElementById("summary");
+  if (summary) {
+    summary.innerHTML = `<p><b>Total Inventory Value:</b> RM ${totalValue.toFixed(2)}</p>
+      <p><b>Total Potential Revenue:</b> RM ${totalRevenue.toFixed(2)}</p>
+      <p><b>Total Stock Quantity:</b> ${totalStock}</p>
+      <p><button id="btn-report">📥 Download Report</button></p>`;
+    const rptBtn = document.getElementById("btn-report");
+    if (rptBtn) rptBtn.addEventListener("click", () => generateReport());
   }
 }
 
-// ====== DOCUMENTS ======
-async function fetchDocuments(){
-  try{
-    const res = await fetch(`${API_BASE}/documents`);
-    if(!res.ok) throw new Error('Failed to load documents.');
-    documents = await res.json();
-    renderDocuments();
-  } catch(err){ console.error('Failed to load documents', err); alert('⚠️ Unable to load documents.'); }
+async function editItem(i) {
+  const item = inventory[i];
+  const sku = prompt("Edit SKU:", item.sku) || item.sku;
+  const name = prompt("Edit name:", item.name) || item.name;
+  const quantity = parseInt(prompt("Edit quantity:", item.quantity), 10) || item.quantity;
+  const category = prompt("Edit category:", item.category) || item.category;
+  const unitCost = parseFloat(prompt("Edit unit cost:", item.unitCost)) || item.unitCost;
+  const unitPrice = parseFloat(prompt("Edit unit price:", item.unitPrice)) || item.unitPrice;
+
+  const body = { sku, name, quantity, category, unitCost, unitPrice };
+  try {
+    const res = await fetch(`${API_BASE}/inventory/${item.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      await fetchInventory();
+    } else {
+      const txt = await res.text();
+      alert("❌ Update failed: " + txt);
+    }
+  } catch (err) {
+    console.error(err); alert("⚠️ Unable to contact server.");
+  }
 }
 
-function renderDocuments(){
-  const list = qs('#docList');
-  if(!list) return;
-  list.innerHTML = '';
-  documents.forEach((d,i) => {
-    const li = document.createElement('li');
-    li.innerHTML = `<span>${escapeHtml(d.name)} ${(d.size?('('+ (d.size/1024).toFixed(1)+' KB)'):'')}</span>`;
-    const btnDown = document.createElement('button'); btnDown.textContent='⬇️'; btnDown.type='button';
-    btnDown.addEventListener('click', ()=> downloadDocument(d.id, d.name));
-    const btnDel = document.createElement('button'); btnDel.textContent='🗑'; btnDel.type='button';
-    btnDel.addEventListener('click', ()=> deleteDocumentConfirm(i));
-    li.appendChild(btnDown); li.appendChild(btnDel);
+async function deleteItem(i) {
+  const item = inventory[i];
+  if (!confirm(`Delete "${item.name}"?`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/inventory/${item.id}`, { method: "DELETE" });
+    if (res.ok) {
+      await fetchInventory();
+    } else {
+      const txt = await res.text();
+      alert("❌ Delete failed: " + txt);
+    }
+  } catch (err) {
+    console.error(err); alert("⚠️ Unable to contact server.");
+  }
+}
+
+// ===============================
+// REPORT
+// ===============================
+async function generateReport() {
+  try {
+    const res = await fetch(`${API_BASE}/inventory/report`);
+    if (!res.ok) throw new Error("Failed to generate report");
+    const blob = await res.blob();
+    const name = res.headers.get("content-disposition")?.split('filename=')[1] || `Inventory_Report.xlsx`;
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = name.replace(/"/g,"");
+    link.click();
+
+    // also upload to Documents endpoint so it appears in history (server handles documents save)
+    const form = new FormData();
+    form.append("documents", new File([blob], name.replace(/"/g,"")));
+    await fetch(`${API_BASE}/documents`, { method: "POST", body: form });
+
+    // refresh documents list if on documents page
+    if (currentPage.includes("documents")) await fetchDocuments();
+  } catch (err) {
+    console.error(err); alert("⚠️ Failed to generate report.");
+  }
+}
+
+// ===============================
+// DOCUMENTS
+// ===============================
+async function fetchDocuments() {
+  try {
+    const res = await fetch(`${API_BASE}/documents`);
+    if (!res.ok) throw new Error("Failed to load documents.");
+    documents = await res.json();
+    renderDocuments();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function uploadDocuments() {
+  const input = document.getElementById("docUpload");
+  const files = Array.from(input.files || []);
+  if (!files.length) return alert("No files selected.");
+  const form = new FormData();
+  files.forEach(f => form.append("documents", f));
+  try {
+    const res = await fetch(`${API_BASE}/documents`, { method: "POST", body: form });
+    if (res.ok) {
+      input.value = "";
+      await fetchDocuments();
+      alert("✅ Uploaded successfully!");
+    } else {
+      const txt = await res.text();
+      alert("❌ Upload failed: " + txt);
+    }
+  } catch (err) {
+    console.error(err); alert("⚠️ Unable to contact server.");
+  }
+}
+
+function renderDocuments() {
+  const list = document.getElementById("docList");
+  if (!list) return;
+  list.innerHTML = "";
+  documents.forEach((d, i) => {
+    const li = document.createElement("li");
+    const sizeText = d.size ? ` (${(d.size/1024).toFixed(1)} KB)` : "";
+    li.innerHTML = `<span>${d.name}${sizeText} - ${d.date || ''}</span>
+      <div>
+        <button data-download="${d.id}" data-name="${d.name}">⬇️</button>
+        <button data-delete="${i}">🗑</button>
+      </div>`;
     list.appendChild(li);
+  });
+  // bind buttons
+  list.querySelectorAll("button").forEach(b=>{
+    if (b.hasAttribute("data-download")) b.addEventListener("click", ()=> downloadDocument(b.dataset.download, b.dataset.name));
+    if (b.hasAttribute("data-delete")) b.addEventListener("click", ()=> deleteDocument(parseInt(b.dataset.delete,10)));
   });
 }
 
-async function uploadDocuments(){
-  const input = qs('#docUpload');
-  const files = Array.from(input?.files || []);
-  if(!files.length) return alert('No files selected.');
-  const form = new FormData();
-  files.forEach(f => form.append('documents', f));
-  try{
-    const res = await fetch(`${API_BASE}/documents`, { method: 'POST', body: form });
-    if(!res.ok){ const txt = await res.text(); throw new Error(txt||'Upload failed'); }
-    input.value = '';
-    await fetchDocuments();
-    alert('✅ Uploaded successfully!');
-  } catch(err){ console.error(err); alert('⚠️ Unable to upload documents.'); }
-}
-
-async function downloadDocument(id,name){
-  try{
+async function downloadDocument(id, name) {
+  try {
     const res = await fetch(`${API_BASE}/documents/${id}/download`);
-    if(!res.ok) throw new Error('Download failed');
+    if (!res.ok) throw new Error("Download failed");
     const blob = await res.blob();
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = name;
-    document.body.appendChild(link); link.click(); link.remove();
-  } catch(err){ console.error(err); alert('⚠️ Unable to download file.'); }
+    link.click();
+  } catch (err) {
+    console.error(err); alert("⚠️ Unable to download file.");
+  }
 }
 
-async function deleteDocumentConfirm(i){
+async function deleteDocument(i) {
   const doc = documents[i];
-  if(!doc) return;
-  if(!confirm(`Delete '${doc.name}'?`)) return;
-  try{
-    const res = await fetch(`${API_BASE}/documents/${doc.id}`, { method: 'DELETE' });
-    if(!res.ok){ const txt = await res.text(); throw new Error(txt||'Delete failed'); }
-    await fetchDocuments();
-    alert('🗑️ Deleted!');
-  } catch(err){ console.error(err); alert('❌ Delete failed.'); }
+  if (!confirm(`Delete '${doc.name}'?`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/documents/${doc.id}`, { method: "DELETE" });
+    if (res.ok) {
+      await fetchDocuments();
+    } else {
+      const txt = await res.text();
+      alert("❌ Delete failed: " + txt);
+    }
+  } catch (err) {
+    console.error(err); alert("⚠️ Unable to delete document.");
+  }
 }
 
-// ====== LOGS ======
-async function fetchLogs(){
-  try{
+// ===============================
+// LOGS & DASHBOARD
+// ===============================
+async function fetchLogs() {
+  try {
     const res = await fetch(`${API_BASE}/logs`);
-    if(!res.ok) throw new Error('Failed to load logs');
+    if (!res.ok) throw new Error("Failed to load logs");
     activityLog = await res.json();
-    const list = qs('#logList');
-    if(!list) return;
-    list.innerHTML = '';
+    const list = document.getElementById("logList");
+    if (!list) return;
+    list.innerHTML = "";
     activityLog.slice().reverse().forEach(l => {
-      const li = document.createElement('li');
-      li.textContent = `${l.time} - ${l.action}`;
+      const li = document.createElement("li");
+      li.textContent = `${new Date(l.time).toLocaleString()} - ${l.user || 'System'} - ${l.action}`;
       list.appendChild(li);
     });
-  } catch(err){ console.error(err); }
+  } catch (err) {
+    console.error(err);
+  }
 }
 
-// ====== DASHBOARD helper used by index.html ======
-async function fetchDashboardData(){
-  try{
+async function fetchDashboardData() {
+  try {
     const res = await fetch(`${API_BASE}/logs`);
-    if(!res.ok) return;
+    if (!res.ok) return;
     const logs = await res.json();
-    const tbody = qs('#recentActivities');
-    if(tbody) {
+    // recent 5
+    const tbody = document.getElementById('recentActivities');
+    if (tbody) {
       tbody.innerHTML = '';
-      logs.slice(0,5).forEach(log => {
+      logs.slice(0,5).forEach(l => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${escapeHtml(log.user || 'Admin')}</td><td>${escapeHtml(log.action)}</td><td>${escapeHtml(log.time)}</td>`;
+        tr.innerHTML = `<td>${l.user || 'Admin'}</td><td>${l.action}</td><td>${new Date(l.time).toLocaleString()}</td>`;
         tbody.appendChild(tr);
       });
     }
-    // unique users logged today
+    // total users today
     const today = new Date().toLocaleDateString();
     const usersToday = new Set(logs.filter(l => new Date(l.time).toLocaleDateString() === today).map(l => l.user));
-    if(qs('#totalUsers')) qs('#totalUsers').textContent = usersToday.size;
-  } catch(e){ console.error('dashboard fetch failed', e); }
-}
-
-// ====== UTILITIES/Bindings for UI ======
-function logout(){
-  sessionStorage.removeItem('isLoggedIn');
-  sessionStorage.removeItem('adminName');
-  localStorage.removeItem('adminName');
-  window.location.href = 'login.html';
-}
-function toggleTheme(){
-  document.body.classList.toggle('dark-mode');
-  localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
-}
-
-// Bind inventory UI controls
-function bindInventoryUI(){
-  if(qs('#addProductBtn')) qs('#addProductBtn').addEventListener('click', addProductFromBar);
-  if(qs('#reportBtn')) qs('#reportBtn').addEventListener('click', generateReport);
-  if(qs('#searchInput')) qs('#searchInput').addEventListener('input', searchItems);
-  if(qs('#clearSearchBtn')) qs('#clearSearchBtn').addEventListener('click', ()=> { if(qs('#searchInput')) qs('#searchInput').value=''; searchItems(); });
-}
-
-// Bind documents page UI
-function bindDocumentsUI(){
-  if(qs('#uploadDocsBtn')) qs('#uploadDocsBtn').addEventListener('click', uploadDocuments);
-  if(qs('#searchDocs')) qs('#searchDocs').addEventListener('input', ()=> {
-    const q = (qs('#searchDocs').value||'').toLowerCase();
-    qsa('#docList li').forEach(li => li.style.display = li.textContent.toLowerCase().includes(q)?'':'none');
-  });
-}
-
-// Product page (load item by ?id=)
-function bindProductPage(){
-  const params = new URLSearchParams(window.location.search);
-  const id = params.get('id');
-  const form = qs('#productForm');
-  if(!form) return;
-  if(id){
-    // load inventory and find item
-    fetch(`${API_BASE}/inventory`).then(r=>r.json()).then(items=>{
-      const it = items.find(x => String(x.id) === String(id));
-      if(!it) { alert('Item not found'); return; }
-      qs('#prod_id').value = it.id;
-      qs('#prod_sku').value = it.sku || '';
-      qs('#prod_name').value = it.name || '';
-      qs('#prod_category').value = it.category || '';
-      qs('#prod_quantity').value = it.quantity || 0;
-      qs('#prod_unitCost').value = it.unitCost || 0;
-      qs('#prod_unitPrice').value = it.unitPrice || 0;
-    }).catch(()=>{});
+    const totalUsersEl = document.getElementById('totalUsers');
+    if (totalUsersEl) totalUsersEl.textContent = usersToday.size;
+  } catch (e) {
+    console.error("fetchDashboardData failed", e);
   }
-  if(qs('#saveProductBtn')) qs('#saveProductBtn').addEventListener('click', async ()=>{
-    const idVal = qs('#prod_id').value;
-    const body = {
-      sku: qs('#prod_sku').value,
-      name: qs('#prod_name').value,
-      category: qs('#prod_category').value,
-      quantity: Number(qs('#prod_quantity').value||0),
-      unitCost: Number(qs('#prod_unitCost').value||0),
-      unitPrice: Number(qs('#prod_unitPrice').value||0)
-    };
-    try{
-      const res = await fetch(`${API_BASE}/inventory/${idVal}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-      if(!res.ok) { const txt = await res.text(); throw new Error(txt||'Update failed'); }
-      alert('✅ Item updated');
-      window.location.href = 'inventory.html';
-    } catch(e){ console.error(e); alert('❌ Update failed'); }
-  });
-  if(qs('#cancelProductBtn')) qs('#cancelProductBtn').addEventListener('click', ()=> window.location.href = 'inventory.html');
+}
+
+// ===============================
+// UTILITIES
+// ===============================
+function logout() {
+  sessionStorage.removeItem("isLoggedIn");
+  sessionStorage.removeItem("adminName");
+  localStorage.removeItem("adminName");
+  // navigate to login
+  window.location.href = "login.html";
+}
+
+function toggleTheme() {
+  document.body.classList.toggle("dark-mode");
+  localStorage.setItem("theme", document.body.classList.contains("dark-mode") ? "dark" : "light");
 }
