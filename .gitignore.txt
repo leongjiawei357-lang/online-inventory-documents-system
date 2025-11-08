@@ -1,8 +1,7 @@
 node_modules/
 server/node_modules/
+client/uploads/
+server/uploads/
+server/reports/
+server/filedb/
 .env
-server/.env
-uploads/
-reports/
-db/
-.DS_Store
