@@ -10,91 +10,41 @@
   <header>
     <h1>🏠 Home Dashboard</h1>
     <nav>
-      <a id="nav-home" href="index.html">Home</a>
-      <a id="nav-inventory" href="inventory.html">Inventory</a>
-      <a id="nav-documents" href="documents.html">Documents</a>
-      <a id="nav-log" href="log.html">Activity Log</a>
-      <button id="btn-theme">🌓 Mode</button>
-      <button id="btn-logout">🚪 Logout</button>
+      <a href="index.html">Home</a>
+      <a href="inventory.html">Inventory</a>
+      <a href="documents.html">Documents</a>
+      <a href="log.html">Activity Log</a>
+      <button id="themeBtn">🌓 Mode</button>
+      <button id="logoutBtn">🚪 Logout</button>
       <div id="adminInfo">Logged in as: <span id="adminName"></span></div>
     </nav>
   </header>
 
   <section>
-    <h2 id="dashboardIntro">Welcome to the Inventory & Document Management System</h2>
-    <p>This dashboard provides quick access to your inventory, document uploads, and activity log.</p>
-    <ul>
-      <li>📦 Manage inventory with SKU tracking.</li>
-      <li>📄 Upload and manage important documents.</li>
-      <li>🕒 Review all actions in your activity log.</li>
-      <li>🛠️ The website was developed by Brendan Jong & Leong Jia Wei</li>
-      <li>⚙️ Render Cloud database was established and managed by Leong</li>
-    </ul>
+    <h2>Welcome to the Inventory & Document Management System</h2>
+    <p id="introText">This dashboard provides quick access to your inventory, document uploads, and activity log.</p>
 
-    <!-- Real-time clock -->
     <div class="clock" id="clock"></div>
 
-    <!-- Quick access buttons -->
     <div class="dashboard-buttons">
-      <div class="dashboard-button" id="shortcut-inventory">📦 Inventory</div>
-      <div class="dashboard-button" id="shortcut-documents">📄 Documents</div>
+      <div class="dashboard-button" id="goInventory">📦 Inventory</div>
+      <div class="dashboard-button" id="goDocuments">📄 Documents</div>
     </div>
 
-    <!-- Total users logged in today -->
     <div class="info-card">
       <h3>🧑‍🧑 Users Logged In Today</h3>
       <p id="totalUsers">0</p>
     </div>
 
-    <!-- Recent activity log -->
     <div class="info-card">
       <h3>🕒 Recent Activity Log</h3>
       <table>
-        <thead>
-          <tr>
-            <th>User</th>
-            <th>Action</th>
-            <th>Time</th>
-          </tr>
-        </thead>
+        <thead><tr><th>User</th><th>Action</th><th>Time</th></tr></thead>
         <tbody id="recentActivities"></tbody>
       </table>
     </div>
   </section>
 
   <script src="script.js"></script>
-  <script>
-    // real-time clock (keeps in client so it's immediate)
-    function updateClock() {
-      const now = new Date();
-      const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
-      const dateStr = now.toLocaleDateString(undefined, options);
-      const timeStr = now.toLocaleTimeString();
-      document.getElementById('clock').textContent = `📅 ${dateStr} ⏰ ${timeStr}`;
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    // Attach simple UI handlers that need to exist immediately (they also are attached again inside script.js)
-    document.addEventListener('DOMContentLoaded', () => {
-      const invBtn = document.getElementById('shortcut-inventory');
-      const docBtn = document.getElementById('shortcut-documents');
-      const themeBtn = document.getElementById('btn-theme');
-      const logoutBtn = document.getElementById('btn-logout');
-
-      if (invBtn) invBtn.addEventListener('click', () => window.location.href = 'inventory.html');
-      if (docBtn) docBtn.addEventListener('click', () => window.location.href = 'documents.html');
-      if (themeBtn) themeBtn.addEventListener('click', () => {
-        if (window.toggleTheme) window.toggleTheme();
-      });
-      if (logoutBtn) logoutBtn.addEventListener('click', () => {
-        if (window.logout) window.logout();
-      });
-
-      // initial dashboard data fetch (script.js provides fetchDashboardData)
-      if (window.fetchDashboardData) window.fetchDashboardData();
-      setInterval(() => { if (window.fetchDashboardData) window.fetchDashboardData(); }, 5000);
-    });
-  </script>
 </body>
 </html>
