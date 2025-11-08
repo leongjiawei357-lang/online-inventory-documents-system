@@ -1,34 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Documents | Inventory System</title>
-<link rel="stylesheet" href="style.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Documents | Inventory System</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<header>
-  <h1>📄 Document Management</h1>
-  <nav>
-    <a href="index.html">Home</a>
-    <a href="inventory.html">Inventory</a>
-    <a href="documents.html">Documents</a>
-    <a href="log.html">Activity Log</a>
-    <button onclick="toggleTheme()">🌓 Mode</button>
-    <button onclick="logout()">🚪 Logout</button>
-    <div id="adminInfo">Logged in as: <span id="adminName"></span></div>
-  </nav>
-</header>
+  <header>
+    <h1>Documents</h1>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="inventory.html">Inventory</a>
+      <a href="documents.html">Documents</a>
+      <a href="log.html">Activity Log</a>
+      <button id="themeBtnDocs">🌓 Mode</button>
+      <button id="logoutBtnDocs">🚪 Logout</button>
+      <div id="adminInfo">Logged in as: <span id="adminName"></span></div>
+    </nav>
+  </header>
 
-<section>
-  <h2>Upload & Manage Documents</h2>
-  <input type="file" id="docUpload" multiple />
-  <button id="uploadDocsBtn">📤 Upload</button>
-  <input type="text" id="searchDocs" placeholder="Search document..." />
-  <ul id="docList"></ul>
-</section>
+  <section>
+    <h2>Documents / Report History</h2>
 
-<script src="script.js" defer></script>
-<script>document.documentElement.dataset.page = 'documents';</script>
+    <input id="docUpload" type="file" multiple />
+    <button id="uploadDocsBtn">Upload</button>
+
+    <ul id="docList"></ul>
+  </section>
+
+  <script src="script.js"></script>
 </body>
 </html>
