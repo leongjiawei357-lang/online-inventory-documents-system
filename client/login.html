@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Login | Inventory System</title>
-<link rel="stylesheet" href="style.css" />
-<style>
-  body { font-family: Arial, sans-serif; background: #f3f3f3; }
-  .login-container { max-width: 350px; background: #fff; margin: 50px auto; padding: 25px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-  label { display: block; margin-top: 10px; }
-  input { width: 100%; padding: 8px; margin-top: 5px; }
-  button { width: 100%; margin-top: 15px; padding: 10px; cursor: pointer; }
-  .toggle-link { text-align: center; margin-top: 15px; cursor: pointer; color: blue; text-decoration: underline; }
-  .info { text-align: center; margin-top: 10px; color: #555; font-size: 0.9em; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login | Inventory System</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #f3f3f3; }
+    .login-container { max-width: 350px; background: #fff; margin: 50px auto; padding: 25px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    label { display: block; margin-top: 10px; }
+    input { width: 100%; padding: 8px; margin-top: 5px; }
+    button { width: 100%; margin-top: 15px; padding: 10px; cursor: pointer; }
+    .toggle-link { text-align: center; margin-top: 15px; cursor: pointer; color: blue; text-decoration: underline; }
+    .info { text-align: center; margin-top: 10px; color: #555; font-size: 0.9em; }
+  </style>
 </head>
 <body>
   <div class="login-container">
@@ -44,19 +44,5 @@
   </div>
 
   <script src="script.js"></script>
-  <script>
-    // Bind login/register toggles and buttons in a CSP-safe way (script.js also binds but this ensures immediate availability)
-    document.addEventListener('DOMContentLoaded', () => {
-      const loginBtn = document.getElementById('loginBtn');
-      const registerBtn = document.getElementById('registerBtn');
-      const toggleToRegister = document.getElementById('toggleToRegister');
-      const toggleToLogin = document.getElementById('toggleToLogin');
-
-      if (loginBtn) loginBtn.addEventListener('click', () => { if (window.login) window.login(); });
-      if (registerBtn) registerBtn.addEventListener('click', () => { if (window.register) window.register(); });
-      if (toggleToRegister) toggleToRegister.addEventListener('click', () => { if (window.toggleForm) window.toggleForm(); });
-      if (toggleToLogin) toggleToLogin.addEventListener('click', () => { if (window.toggleForm) window.toggleForm(); });
-    });
-  </script>
 </body>
 </html>
