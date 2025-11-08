@@ -1,50 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Login | Inventory System</title>
-<link rel="stylesheet" href="style.css" />
-<style>
-  body { font-family: Arial, sans-serif; background: #f3f3f3; }
-  .login-container { max-width: 350px; background: #fff; margin: 50px auto; padding: 25px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-  label { display: block; margin-top: 10px; }
-  input { width: 100%; padding: 8px; margin-top: 5px; }
-  button { width: 100%; margin-top: 15px; padding: 10px; cursor: pointer; }
-  .toggle-link { text-align: center; margin-top: 15px; cursor: pointer; color: blue; text-decoration: underline; }
-  .info { text-align: center; margin-top: 10px; color: #555; font-size: 0.9em; }
-  #loginMessage,#registerMessage { margin-top:10px; font-weight:600; text-align:center; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login | Inventory System</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #f3f3f3; }
+    .login-container { max-width: 350px; background: #fff; margin: 50px auto; padding: 25px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    label { display: block; margin-top: 10px; }
+    input { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; }
+    button { width: 100%; margin-top: 15px; padding: 10px; cursor: pointer; }
+    .toggle-link { text-align: center; margin-top: 15px; cursor: pointer; color: blue; text-decoration: underline; }
+    .info { text-align: center; margin-top: 10px; color: #555; font-size: 0.9em; }
+    #loginMessage, #registerMessage { margin-top: 8px; min-height: 18px; }
+  </style>
 </head>
 <body>
   <div class="login-container">
     <h2 id="formTitle">🔐 Admin Login</h2>
 
-    <div id="loginForm">
-      <label>Username</label>
+    <div id="loginForm" aria-live="polite">
+      <label for="username">Username</label>
       <input type="text" id="username" placeholder="Enter username" autocomplete="username" />
-      <label>Password</label>
+
+      <label for="password">Password</label>
       <input type="password" id="password" placeholder="Enter password" autocomplete="current-password" />
+
       <button id="loginBtn" type="button">Login</button>
 
       <p class="info">Forgot password? Contact the admin: <b>01133127622</b></p>
-      <div class="toggle-link" id="toggleToRegister">Don't have an account? Register here</div>
-      <p id="loginMessage"></p>
+      <div class="toggle-link" id="toggleToRegister" role="button" tabindex="0">Don't have an account? Register here</div>
+      <p id="loginMessage" aria-live="polite"></p>
     </div>
 
-    <div id="registerForm" style="display:none;">
-      <label>New Username</label>
-      <input type="text" id="newUsername" placeholder="Enter username" />
-      <label>New Password</label>
-      <input type="password" id="newPassword" placeholder="Enter password" />
-      <label>Security Code</label>
+    <div id="registerForm" style="display:none;" aria-live="polite">
+      <label for="newUsername">New Username</label>
+      <input type="text" id="newUsername" placeholder="Enter username" autocomplete="username" />
+
+      <label for="newPassword">New Password</label>
+      <input type="password" id="newPassword" placeholder="Enter password" autocomplete="new-password" />
+
+      <label for="securityCode">Security Code</label>
       <input type="text" id="securityCode" placeholder="Enter company security code" />
+
       <button id="registerBtn" type="button">Register Account</button>
-      <div class="toggle-link" id="toggleToLogin">Already have an account? Login here</div>
-      <p id="registerMessage"></p>
+      <div class="toggle-link" id="toggleToLogin" role="button" tabindex="0">Already have an account? Login here</div>
+      <p id="registerMessage" aria-live="polite"></p>
     </div>
   </div>
 
+  <!-- external script (no inline handlers) -->
   <script src="script.js"></script>
 </body>
 </html>
