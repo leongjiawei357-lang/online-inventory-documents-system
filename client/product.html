@@ -1,30 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Product - Inventory</title>
-<link rel="stylesheet" href="style.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Product | Inventory System</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<header><h1>Product (Edit)</h1></header>
-<section>
-  <form id="productForm">
-    <input id="prod_id" type="hidden" />
-    <label>SKU</label><input id="prod_sku" /><br/>
-    <label>Name</label><input id="prod_name" /><br/>
-    <label>Category</label><input id="prod_category" /><br/>
-    <label>Quantity</label><input id="prod_quantity" type="number" /><br/>
-    <label>Unit Cost</label><input id="prod_unitCost" type="number" step="0.01" /><br/>
-    <label>Unit Price</label><input id="prod_unitPrice" type="number" step="0.01" /><br/>
-    <button id="saveProductBtn" type="button">Save</button>
-    <button id="cancelProductBtn" type="button">Cancel</button>
-  </form>
-</section>
+  <header>
+    <h1>Products</h1>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="inventory.html">Inventory</a>
+      <a href="documents.html">Documents</a>
+      <a href="log.html">Activity Log</a>
+    </nav>
+  </header>
 
-<script src="script.js" defer></script>
-<script>
-document.documentElement.dataset.page = 'product';
-</script>
+  <section>
+    <h2>Product Entry (alias of Add Product)</h2>
+    <p>This page duplicates the add product form and exists so your team can separate product data from inventory actions if desired.</p>
+    <a href="inventory.html">Go to Inventory</a>
+  </section>
+
+  <script src="script.js"></script>
 </body>
 </html>
