@@ -1,11 +1,22 @@
-# Online Inventory & Documents Management System
+# Online Inventory & Documents System
 
-## Overview
-This project includes a Node.js backend (Express, MongoDB optional) and a static client. Reports are generated as XLSX and saved into `server/reports`. Documents are saved into `server/uploads`. Generated reports are automatically added to the Documents list.
+## Quick start (local)
+- Open two terminals:
+  - Client: open `client` folder (static files) with Live Server OR serve via Express (server serves client)
+  - Server:
+    ```
+    cd server
+    npm install
+    cp .env.example .env
+    # edit .env for MONGO_URI and SECURITY_CODE if needed
+    npm run dev
+    ```
+- Visit http://localhost:5000/
 
-## Setup (local)
-1. Copy `.env.example` to `/server/.env` and fill values (MONGO_URI, SECURITY_CODE).
-2. From `/server` run:
-   ```bash
-   npm install
-   npm run dev   # nodemon
+## Render notes
+- Root build: set service root to `server`
+- Start command: `npm start`
+- Ensure `node` engine >=18 in package.json
+- If using Mongo, set `MONGO_URI` in Render environment.
+- Set `SECURITY_CODE` in Render environment variable (same as your register form).
+
