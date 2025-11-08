@@ -1,194 +1,167 @@
-// ===============================
-// CONFIG (Render Backend)
-// ===============================
+// script.js - client side (CSP-safe, no inline onclick)
 const API_BASE = "https://online-inventory-documents-system.onrender.com/api";
 
-// ===============================
-// LOGIN REDIRECT (only redirect if not on login page)
-// ===============================
-if (!sessionStorage.getItem("isLoggedIn") && !window.location.pathname.includes("login.html")) {
-  window.location.href = "login.html";
-}
+// Simple routing check
+const currentPage = window.location.pathname.split("/").pop();
 
-// ===============================
-// GLOBAL
-// ===============================
 let inventory = [];
 let documents = [];
 let activityLog = [];
-const currentPage = window.location.pathname.split("/").pop();
 
-// small helper to set admin name on pages
-function setAdminName() {
-  const adminName = sessionStorage.getItem("adminName") || localStorage.getItem("adminName");
-  if (document.getElementById("adminName")) document.getElementById("adminName").textContent = adminName || "Admin";
-}
-setAdminName();
+// ---------- Utilities ----------
+function $(id) { return document.getElementById(id); }
+function showMessage(el, txt, color = "red") { if (!el) return; el.textContent = txt; el.style.color = color; }
 
-// ===============================
-// ON LOAD - fetch relevant data
-// ===============================
+// ---------- Initialization ----------
 window.addEventListener("DOMContentLoaded", async () => {
-  setAdminName();
-  // Attach global UI buttons (CSP-safe)
-  const btnTheme = document.getElementById("btn-theme") || document.getElementById("btnTheme") || document.getElementById("btn-theme");
-  const btnLogout = document.getElementById("btn-logout") || document.getElementById("btnLogout") || document.getElementById("btn-logout");
-  const quickInv = document.getElementById("shortcut-inventory");
-  const quickDoc = document.getElementById("shortcut-documents");
-
-  if (btnTheme) btnTheme.addEventListener("click", toggleTheme);
-  if (btnLogout) btnLogout.addEventListener("click", logout);
-  if (quickInv) quickInv.addEventListener("click", () => window.location.href = "inventory.html");
-  if (quickDoc) quickDoc.addEventListener("click", () => window.location.href = "documents.html");
-
-  // login page buttons (if present)
-  const loginBtn = document.getElementById("loginBtn");
-  const registerBtn = document.getElementById("registerBtn");
-  const toggleToRegister = document.getElementById("toggleToRegister");
-  const toggleToLogin = document.getElementById("toggleToLogin");
-  if (loginBtn) loginBtn.addEventListener("click", login);
-  if (registerBtn) registerBtn.addEventListener("click", register);
-  if (toggleToRegister) toggleToRegister.addEventListener("click", toggleForm);
-  if (toggleToLogin) toggleToLogin.addEventListener("click", toggleForm);
-
-  // page-specific fetches
+  // Bind UI event handlers (CSP-safe)
+  bindAuthButtons();
+  bindThemeLogoutButtons();
+  bindDashboardButtons();
+  // Fetch data depending on page
   try {
     if (currentPage.includes("inventory")) await fetchInventory();
     if (currentPage.includes("documents")) await fetchDocuments();
     if (currentPage.includes("log")) await fetchLogs();
-    if (currentPage === "index.html" || currentPage === "" || currentPage === "index") {
-      // fetch dashboard activities
-      if (window.fetchDashboardData) window.fetchDashboardData();
+    if (currentPage === "" || currentPage === "index.html") {
+      await fetchLogs();
+      updateClock();
+      setInterval(updateClock, 1000);
     }
   } catch (e) {
-    console.error("Error during page init:", e);
+    console.error("Init error", e);
   }
+  // set adminName
+  const adminName = sessionStorage.getItem("adminName") || localStorage.getItem("adminName");
+  if ($("adminName")) $("adminName").textContent = adminName || "Admin";
 
-  // attach inventory add form if present
-  const addItemForm = document.getElementById("addItemForm");
-  if (addItemForm) addItemForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const formData = new FormData(addItemForm);
-    const item = Object.fromEntries(formData.entries());
-    item.quantity = parseInt(item.quantity || 0, 10);
-    item.unitCost = parseFloat(item.unitCost || 0);
-    item.unitPrice = parseFloat(item.unitPrice || 0);
-    try {
-      const res = await fetch(`${API_BASE}/inventory`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(item)
-      });
-      if (res.ok) {
-        alert("✅ Item added successfully!");
-        addItemForm.reset();
-        await fetchInventory();
-      } else {
-        const txt = await res.text();
-        alert("❌ Failed to add item: " + txt);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("⚠️ Unable to contact server.");
-    }
-  });
+  // theme
+  if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark-mode");
 });
 
-// ===============================
-// AUTH (Login/Register)
-// ===============================
-async function login() {
-  const user = document.getElementById("username")?.value?.trim();
-  const pass = document.getElementById("password")?.value?.trim();
-  const msg = document.getElementById("loginMessage");
-  if (msg) msg.textContent = "";
+// ---------- AUTH ----------
+function bindAuthButtons() {
+  const loginBtn = $("loginBtn");
+  const registerBtn = $("registerBtn");
+  const toggleToRegister = $("toggleToRegister");
+  const toggleToLogin = $("toggleToLogin");
+  if (loginBtn) loginBtn.addEventListener("click", doLogin);
+  if (registerBtn) registerBtn.addEventListener("click", doRegister);
+  if (toggleToRegister) toggleToRegister.addEventListener("click", toggleForm);
+  if (toggleToLogin) toggleToLogin.addEventListener("click", toggleForm);
+}
 
-  if (!user || !pass) {
-    if (msg) { msg.textContent = "⚠️ Please enter username and password."; msg.style.color = "red"; }
-    return;
-  }
+// login function
+async function doLogin() {
+  const user = $("username")?.value?.trim();
+  const pass = $("password")?.value?.trim();
+  const msg = $("loginMessage");
+  showMessage(msg, "");
+  if (!user || !pass) { showMessage(msg, "⚠️ Please enter username and password.", "red"); return; }
   try {
     const res = await fetch(`${API_BASE}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: user, password: pass })
+      body: JSON.stringify({ username: user, password: pass }),
     });
     const data = await res.json();
     if (res.ok) {
       sessionStorage.setItem("isLoggedIn", "true");
       sessionStorage.setItem("adminName", data.username || user);
       localStorage.setItem("adminName", data.username || user);
-      if (msg) { msg.textContent = "✅ Login successful! Redirecting..."; msg.style.color = "green"; }
-      setTimeout(() => window.location.href = "index.html", 700);
+      showMessage(msg, "✅ Login successful! Redirecting...", "green");
+      setTimeout(() => { window.location.href = "index.html"; }, 700);
     } else {
-      if (msg) { msg.textContent = data.message || "❌ Invalid username or password."; msg.style.color = "red"; }
+      showMessage(msg, data.message || "❌ Invalid username or password.", "red");
     }
-  } catch (err) {
-    console.error("Login error", err);
-    if (msg) { msg.textContent = "❌ Unable to contact server."; msg.style.color = "red"; }
+  } catch (e) {
+    console.error(e);
+    showMessage(msg, "❌ Unable to contact server.", "red");
   }
 }
 
-async function register() {
-  const user = document.getElementById("newUsername")?.value?.trim();
-  const pass = document.getElementById("newPassword")?.value?.trim();
-  const code = document.getElementById("securityCode")?.value?.trim();
-  const msg = document.getElementById("registerMessage");
-  if (msg) msg.textContent = "";
-
-  if (!user || !pass || !code) {
-    if (msg) { msg.textContent = "⚠️ Please fill in all fields."; msg.style.color = "red"; }
-    return;
-  }
-
+// register function
+async function doRegister() {
+  const user = $("newUsername")?.value?.trim();
+  const pass = $("newPassword")?.value?.trim();
+  const code = $("securityCode")?.value?.trim();
+  const msg = $("registerMessage");
+  showMessage(msg, "");
+  if (!user || !pass || !code) { showMessage(msg, "⚠️ Please fill in all fields.", "red"); return; }
   try {
-    // IMPORTANT: send fields named username/password/securityCode to match server
     const res = await fetch(`${API_BASE}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: user, password: pass, securityCode: code })
+      body: JSON.stringify({ username: user, password: pass, securityCode: code }),
     });
     const data = await res.json();
     if (res.ok) {
-      if (msg) { msg.textContent = "✅ Registered successfully! You can now log in."; msg.style.color = "green"; }
-      // show login form
-      setTimeout(toggleForm, 1100);
+      showMessage(msg, "✅ Registered successfully! You can now log in.", "green");
+      setTimeout(toggleForm, 1000);
     } else {
-      if (msg) { msg.textContent = data.message || "❌ Registration failed."; msg.style.color = "red"; }
+      showMessage(msg, data.message || "❌ Registration failed.", "red");
     }
-  } catch (err) {
-    console.error("Register error", err);
-    if (msg) { msg.textContent = "❌ Unable to contact server."; msg.style.color = "red"; }
+  } catch (e) {
+    console.error(e);
+    showMessage(msg, "❌ Unable to contact server.", "red");
   }
 }
 
 function toggleForm() {
-  const loginForm = document.getElementById("loginForm");
-  const registerForm = document.getElementById("registerForm");
-  const formTitle = document.getElementById("formTitle");
-  if (!loginForm || !registerForm || !formTitle) return;
+  const loginForm = $("loginForm");
+  const registerForm = $("registerForm");
+  const formTitle = $("formTitle");
+  if (!loginForm || !registerForm) return;
   if (loginForm.style.display === "none") {
     loginForm.style.display = "block";
     registerForm.style.display = "none";
-    formTitle.textContent = "🔐 Admin Login";
+    if (formTitle) formTitle.textContent = "🔐 Admin Login";
   } else {
     loginForm.style.display = "none";
     registerForm.style.display = "block";
-    formTitle.textContent = "🧾 Register Account";
+    if (formTitle) formTitle.textContent = "🧾 Register Account";
   }
 }
 
-// ===============================
-// INVENTORY
-// ===============================
+// ---------- DASHBOARD ----------
+function bindDashboardButtons() {
+  const themeBtns = document.querySelectorAll("#themeBtn, #themeBtnInv, #themeBtnDocs");
+  themeBtns.forEach(b => b && b.addEventListener("click", toggleTheme));
+  const logoutBtns = document.querySelectorAll("#logoutBtn, #logoutBtnInv, #logoutBtnDocs");
+  logoutBtns.forEach(b => b && b.addEventListener("click", logout));
+  const goInv = $("goInventory");
+  const goDocs = $("goDocuments");
+  if (goInv) goInv.addEventListener("click", () => location.href = "inventory.html");
+  if (goDocs) goDocs.addEventListener("click", () => location.href = "documents.html");
+
+  const reportBtn = $("downloadReportBtn");
+  if (reportBtn) reportBtn.addEventListener("click", () => generateReport());
+
+  const uploadBtn = $("uploadDocsBtn");
+  if (uploadBtn) uploadBtn.addEventListener("click", uploadDocuments);
+
+  // upload input change triggers nothing; we use button
+}
+
+// clock
+function updateClock() {
+  const now = new Date();
+  const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+  const dateStr = now.toLocaleDateString(undefined, options);
+  const timeStr = now.toLocaleTimeString();
+  const el = $("clock");
+  if (el) el.textContent = `📅 ${dateStr} ⏰ ${timeStr}`;
+}
+
+// ---------- INVENTORY ----------
 async function fetchInventory() {
   try {
     const res = await fetch(`${API_BASE}/inventory`);
-    if (!res.ok) throw new Error("Failed to fetch inventory.");
+    if (!res.ok) throw new Error("Failed to fetch inventory");
     inventory = await res.json();
     renderInventory();
-  } catch (err) {
-    console.error(err);
+  } catch (e) {
+    console.error(e);
     alert("⚠️ Unable to load inventory data.");
   }
 }
@@ -197,7 +170,6 @@ function renderInventory() {
   const tbody = document.querySelector("#inventoryTable tbody");
   if (!tbody) return;
   tbody.innerHTML = "";
-
   let totalValue = 0, totalRevenue = 0, totalStock = 0;
   inventory.forEach((item, i) => {
     const itemTotalValue = (item.quantity || 0) * (item.unitCost || 0);
@@ -206,166 +178,210 @@ function renderInventory() {
     totalRevenue += itemRevenue;
     totalStock += (item.quantity || 0);
 
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${item.sku}</td>
-      <td>${item.name}</td>
-      <td>${item.category}</td>
-      <td>${item.quantity}</td>
+    const tr = document.createElement("tr");
+    if (item.quantity < (item.reorderPoint || 5)) tr.classList.add("low-stock");
+    tr.innerHTML = `
+      <td>${item.sku || ""}</td>
+      <td>${item.name || ""}</td>
+      <td>${item.category || ""}</td>
+      <td>${item.quantity ?? 0}</td>
       <td>${(item.unitCost||0).toFixed(2)}</td>
       <td>${(item.unitPrice||0).toFixed(2)}</td>
       <td>${itemTotalValue.toFixed(2)}</td>
       <td>${itemRevenue.toFixed(2)}</td>
       <td>
-        <button data-action="edit" data-index="${i}">✏️</button>
-        <button data-action="delete" data-index="${i}">🗑️</button>
+        <button class="editBtn" data-i="${i}">✏️</button>
+        <button class="delBtn" data-i="${i}">🗑️</button>
       </td>
     `;
-    tbody.appendChild(row);
+    tbody.appendChild(tr);
   });
 
-  // attach delegated click handlers for edit/delete
-  tbody.querySelectorAll("button").forEach(btn => {
-    const action = btn.getAttribute("data-action");
-    const idx = parseInt(btn.getAttribute("data-index"), 10);
-    if (action === "edit") btn.addEventListener("click", () => editItem(idx));
-    if (action === "delete") btn.addEventListener("click", () => deleteItem(idx));
-  });
+  const summary = $("summary");
+  if (summary) summary.innerHTML = `<p><b>Total Inventory Value:</b> RM ${totalValue.toFixed(2)}</p>
+    <p><b>Total Potential Revenue:</b> RM ${totalRevenue.toFixed(2)}</p>
+    <p><b>Total Stock Quantity:</b> ${totalStock}</p>`;
 
-  const summary = document.getElementById("summary");
-  if (summary) {
-    summary.innerHTML = `<p><b>Total Inventory Value:</b> RM ${totalValue.toFixed(2)}</p>
-      <p><b>Total Potential Revenue:</b> RM ${totalRevenue.toFixed(2)}</p>
-      <p><b>Total Stock Quantity:</b> ${totalStock}</p>
-      <p><button id="btn-report">📥 Download Report</button></p>`;
-    const rptBtn = document.getElementById("btn-report");
-    if (rptBtn) rptBtn.addEventListener("click", () => generateReport());
-  }
+  // bind edit/delete buttons
+  document.querySelectorAll(".editBtn").forEach(b => b.addEventListener("click", (e) => {
+    const i = Number(e.currentTarget.dataset.i);
+    editItem(i);
+  }));
+  document.querySelectorAll(".delBtn").forEach(b => b.addEventListener("click", (e) => {
+    const i = Number(e.currentTarget.dataset.i);
+    deleteItem(i);
+  }));
+}
+
+// Add item form
+const addForm = $("addItemForm");
+if (addForm) {
+  addForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const form = new FormData(addForm);
+    const item = Object.fromEntries(form.entries());
+    item.quantity = Number(item.quantity || 0);
+    item.unitCost = Number(item.unitCost || 0);
+    item.unitPrice = Number(item.unitPrice || 0);
+    try {
+      const res = await fetch(`${API_BASE}/inventory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to add");
+      }
+      alert("✅ Item added successfully!");
+      addForm.reset();
+      await fetchInventory();
+    } catch (e) {
+      console.error(e);
+      alert("⚠️ Unable to add item.");
+    }
+  });
 }
 
 async function editItem(i) {
   const item = inventory[i];
+  if (!item) return;
   const sku = prompt("Edit SKU:", item.sku) || item.sku;
   const name = prompt("Edit name:", item.name) || item.name;
-  const quantity = parseInt(prompt("Edit quantity:", item.quantity), 10) || item.quantity;
+  let quantity = prompt("Edit quantity:", item.quantity);
+  quantity = Number(quantity || item.quantity || 0);
   const category = prompt("Edit category:", item.category) || item.category;
-  const unitCost = parseFloat(prompt("Edit unit cost:", item.unitCost)) || item.unitCost;
-  const unitPrice = parseFloat(prompt("Edit unit price:", item.unitPrice)) || item.unitPrice;
+  let unitCost = prompt("Edit unit cost:", item.unitCost);
+  unitCost = Number(unitCost || item.unitCost || 0);
+  let unitPrice = prompt("Edit unit price:", item.unitPrice);
+  unitPrice = Number(unitPrice || item.unitPrice || 0);
 
   const body = { sku, name, quantity, category, unitCost, unitPrice };
   try {
-    const res = await fetch(`${API_BASE}/inventory/${item.id}`, {
+    const res = await fetch(`${API_BASE}/inventory/${item._id || item.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (res.ok) {
-      await fetchInventory();
-    } else {
-      const txt = await res.text();
-      alert("❌ Update failed: " + txt);
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || "Update failed");
     }
-  } catch (err) {
-    console.error(err); alert("⚠️ Unable to contact server.");
+    alert("✅ Item updated");
+    await fetchInventory();
+  } catch (e) {
+    console.error(e);
+    alert("⚠️ Update failed");
   }
 }
 
 async function deleteItem(i) {
   const item = inventory[i];
+  if (!item) return;
   if (!confirm(`Delete "${item.name}"?`)) return;
   try {
-    const res = await fetch(`${API_BASE}/inventory/${item.id}`, { method: "DELETE" });
-    if (res.ok) {
-      await fetchInventory();
-    } else {
-      const txt = await res.text();
-      alert("❌ Delete failed: " + txt);
+    const res = await fetch(`${API_BASE}/inventory/${item._id || item.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || "Delete failed");
     }
-  } catch (err) {
-    console.error(err); alert("⚠️ Unable to contact server.");
+    alert("🗑️ Deleted");
+    await fetchInventory();
+  } catch (e) {
+    console.error(e);
+    alert("⚠️ Delete failed");
   }
 }
 
-// ===============================
-// REPORT
-// ===============================
+// ---------- REPORT ----------
 async function generateReport() {
   try {
     const res = await fetch(`${API_BASE}/inventory/report`);
-    if (!res.ok) throw new Error("Failed to generate report");
+    if (!res.ok) throw new Error("Report failed");
     const blob = await res.blob();
-    const name = res.headers.get("content-disposition")?.split('filename=')[1] || `Inventory_Report.xlsx`;
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = name.replace(/"/g,"");
-    link.click();
-
-    // also upload to Documents endpoint so it appears in history (server handles documents save)
-    const form = new FormData();
-    form.append("documents", new File([blob], name.replace(/"/g,"")));
-    await fetch(`${API_BASE}/documents`, { method: "POST", body: form });
-
-    // refresh documents list if on documents page
-    if (currentPage.includes("documents")) await fetchDocuments();
-  } catch (err) {
-    console.error(err); alert("⚠️ Failed to generate report.");
+    const filenameHeader = res.headers.get("content-disposition") || "Inventory_Report.xlsx";
+    // create download link
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filenameHeader.split('filename=')[1] ? filenameHeader.split('filename=')[1].replace(/"/g,'') : "Inventory_Report.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    alert("✅ Report downloaded and added to Documents.");
+    // refresh documents list so user sees the report there
+    await fetchDocuments();
+  } catch (e) {
+    console.error(e);
+    alert("⚠️ Failed to generate report.");
   }
 }
 
-// ===============================
-// DOCUMENTS
-// ===============================
+// ---------- DOCUMENTS ----------
 async function fetchDocuments() {
   try {
     const res = await fetch(`${API_BASE}/documents`);
-    if (!res.ok) throw new Error("Failed to load documents.");
+    if (!res.ok) throw new Error("Failed to load documents");
     documents = await res.json();
     renderDocuments();
-  } catch (err) {
-    console.error(err);
+  } catch (e) {
+    console.error(e);
+    alert("⚠️ Unable to load documents.");
   }
 }
 
-async function uploadDocuments() {
-  const input = document.getElementById("docUpload");
-  const files = Array.from(input.files || []);
-  if (!files.length) return alert("No files selected.");
-  const form = new FormData();
-  files.forEach(f => form.append("documents", f));
-  try {
-    const res = await fetch(`${API_BASE}/documents`, { method: "POST", body: form });
-    if (res.ok) {
-      input.value = "";
-      await fetchDocuments();
-      alert("✅ Uploaded successfully!");
-    } else {
-      const txt = await res.text();
-      alert("❌ Upload failed: " + txt);
-    }
-  } catch (err) {
-    console.error(err); alert("⚠️ Unable to contact server.");
-  }
-}
-
-function renderDocuments() {
-  const list = document.getElementById("docList");
+async function renderDocuments() {
+  const list = $("docList");
   if (!list) return;
   list.innerHTML = "";
-  documents.forEach((d, i) => {
+  documents.forEach((d) => {
     const li = document.createElement("li");
-    const sizeText = d.size ? ` (${(d.size/1024).toFixed(1)} KB)` : "";
-    li.innerHTML = `<span>${d.name}${sizeText} - ${d.date || ''}</span>
+    const sizeText = d.size ? `(${(d.size/1024).toFixed(1)} KB)` : "";
+    const id = d._id || d.id;
+    li.innerHTML = `<span>${d.name} ${sizeText} - ${d.date ? new Date(d.date).toLocaleString() : ""}</span>
       <div>
-        <button data-download="${d.id}" data-name="${d.name}">⬇️</button>
-        <button data-delete="${i}">🗑</button>
+        <button class="dlBtn" data-id="${id}" data-name="${d.name}">⬇️</button>
+        <button class="delDocBtn" data-id="${id}">🗑</button>
       </div>`;
     list.appendChild(li);
   });
-  // bind buttons
-  list.querySelectorAll("button").forEach(b=>{
-    if (b.hasAttribute("data-download")) b.addEventListener("click", ()=> downloadDocument(b.dataset.download, b.dataset.name));
-    if (b.hasAttribute("data-delete")) b.addEventListener("click", ()=> deleteDocument(parseInt(b.dataset.delete,10)));
-  });
+  // events
+  document.querySelectorAll(".dlBtn").forEach(b => b.addEventListener("click", (e) => {
+    const id = e.currentTarget.dataset.id;
+    const name = e.currentTarget.dataset.name;
+    downloadDocument(id, name);
+  }));
+  document.querySelectorAll(".delDocBtn").forEach(b => b.addEventListener("click", async (e) => {
+    const id = e.currentTarget.dataset.id;
+    if (!confirm("Delete document?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/documents/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      await fetchDocuments();
+    } catch (ex) {
+      console.error(ex);
+      alert("⚠️ Delete failed");
+    }
+  }));
+}
+
+async function uploadDocuments() {
+  const input = $("docUpload");
+  if (!input || !input.files.length) return alert("No files selected.");
+  const form = new FormData();
+  Array.from(input.files).forEach(f => form.append("documents", f));
+  try {
+    const res = await fetch(`${API_BASE}/documents`, { method: "POST", body: form });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || "Upload failed");
+    }
+    alert("✅ Uploaded");
+    input.value = "";
+    await fetchDocuments();
+  } catch (e) {
+    console.error(e);
+    alert("⚠️ Upload failed");
+  }
 }
 
 async function downloadDocument(id, name) {
@@ -373,89 +389,62 @@ async function downloadDocument(id, name) {
     const res = await fetch(`${API_BASE}/documents/${id}/download`);
     if (!res.ok) throw new Error("Download failed");
     const blob = await res.blob();
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = name;
-    link.click();
-  } catch (err) {
-    console.error(err); alert("⚠️ Unable to download file.");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    console.error(e);
+    alert("⚠️ Unable to download");
   }
 }
 
-async function deleteDocument(i) {
-  const doc = documents[i];
-  if (!confirm(`Delete '${doc.name}'?`)) return;
-  try {
-    const res = await fetch(`${API_BASE}/documents/${doc.id}`, { method: "DELETE" });
-    if (res.ok) {
-      await fetchDocuments();
-    } else {
-      const txt = await res.text();
-      alert("❌ Delete failed: " + txt);
-    }
-  } catch (err) {
-    console.error(err); alert("⚠️ Unable to delete document.");
-  }
-}
-
-// ===============================
-// LOGS & DASHBOARD
-// ===============================
+// ---------- LOGS ----------
 async function fetchLogs() {
   try {
     const res = await fetch(`${API_BASE}/logs`);
     if (!res.ok) throw new Error("Failed to load logs");
     activityLog = await res.json();
-    const list = document.getElementById("logList");
+    const list = $("logList");
     if (!list) return;
     list.innerHTML = "";
-    activityLog.slice().reverse().forEach(l => {
+    const recent = (Array.isArray(activityLog) ? activityLog : []).slice(0, 50);
+    recent.reverse().forEach(l => {
       const li = document.createElement("li");
-      li.textContent = `${new Date(l.time).toLocaleString()} - ${l.user || 'System'} - ${l.action}`;
+      const time = l.time ? new Date(l.time).toLocaleString() : "";
+      li.textContent = `${time} - ${l.user || 'System'} - ${l.action}`;
       list.appendChild(li);
     });
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-async function fetchDashboardData() {
-  try {
-    const res = await fetch(`${API_BASE}/logs`);
-    if (!res.ok) return;
-    const logs = await res.json();
-    // recent 5
-    const tbody = document.getElementById('recentActivities');
-    if (tbody) {
-      tbody.innerHTML = '';
-      logs.slice(0,5).forEach(l => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${l.user || 'Admin'}</td><td>${l.action}</td><td>${new Date(l.time).toLocaleString()}</td>`;
-        tbody.appendChild(tr);
+    // Dashboard: recent activities table
+    const tb = $("recentActivities");
+    if (tb) {
+      tb.innerHTML = "";
+      (activityLog.slice(0,5) || []).forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${r.user || 'Admin'}</td><td>${r.action}</td><td>${r.time ? new Date(r.time).toLocaleString() : ''}</td>`;
+        tb.appendChild(tr);
       });
+      const today = new Date().toLocaleDateString();
+      const usersToday = new Set((activityLog || []).filter(a => new Date(a.time).toLocaleDateString() === today).map(a => a.user));
+      const totalUsers = $("totalUsers");
+      if (totalUsers) totalUsers.textContent = usersToday.size;
     }
-    // total users today
-    const today = new Date().toLocaleDateString();
-    const usersToday = new Set(logs.filter(l => new Date(l.time).toLocaleDateString() === today).map(l => l.user));
-    const totalUsersEl = document.getElementById('totalUsers');
-    if (totalUsersEl) totalUsersEl.textContent = usersToday.size;
   } catch (e) {
-    console.error("fetchDashboardData failed", e);
+    console.error("Failed to load logs", e);
   }
 }
 
-// ===============================
-// UTILITIES
-// ===============================
+// ---------- Utilities: theme & logout ----------
+function toggleTheme() {
+  document.body.classList.toggle("dark-mode");
+  localStorage.setItem("theme", document.body.classList.contains("dark-mode") ? "dark" : "light");
+}
+
 function logout() {
   sessionStorage.removeItem("isLoggedIn");
   sessionStorage.removeItem("adminName");
   localStorage.removeItem("adminName");
-  // navigate to login
   window.location.href = "login.html";
-}
-
-function toggleTheme() {
-  document.body.classList.toggle("dark-mode");
-  localStorage.setItem("theme", document.body.classList.contains("dark-mode") ? "dark" : "light");
 }
